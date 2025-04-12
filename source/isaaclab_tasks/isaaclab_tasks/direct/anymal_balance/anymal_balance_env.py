@@ -13,13 +13,13 @@ from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sensors import ContactSensor, RayCaster
 
-from .anymal_c_env_cfg import AnymalCFlatEnvCfg, AnymalCRoughEnvCfg
+from .anymal_balance_env_cfg import QuadEanRoughEnvCfg, QuadEanFlatEnvCfg
 
 
-class AnymalCEnv(DirectRLEnv):
-    cfg: AnymalCFlatEnvCfg | AnymalCRoughEnvCfg
+class QuadEanEnv(DirectRLEnv):
+    cfg: QuadEanFlatEnvCfg | QuadEanRoughEnvCfg
 
-    def __init__(self, cfg: AnymalCFlatEnvCfg | AnymalCRoughEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: QuadEanFlatEnvCfg | QuadEanRoughEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
         # Joint position command (deviation from default joint positions)
@@ -48,16 +48,16 @@ class AnymalCEnv(DirectRLEnv):
             ]
         }
         # Get specific body indices
-        self._base_id, _ = self._contact_sensor.find_bodies("base")
-        self._feet_ids, _ = self._contact_sensor.find_bodies(".*FOOT")
-        self._undesired_contact_body_ids, _ = self._contact_sensor.find_bodies(".*THIGH")
+        self._base_id, _ = self._contact_sensor.find_bodies("base_link")
+        self._feet_ids, _ = self._contact_sensor.find_bodies(".*shoulder_link")
+        self._undesired_contact_body_ids, _ = self._contact_sensor.find_bodies(".*foot_link")
 
     def _setup_scene(self):
         self._robot = Articulation(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
         self._contact_sensor = ContactSensor(self.cfg.contact_sensor)
         self.scene.sensors["contact_sensor"] = self._contact_sensor
-        if isinstance(self.cfg, AnymalCRoughEnvCfg):
+        if isinstance(self.cfg, QuadEanRoughEnvCfg):
             # we add a height scanner for perceptive locomotion
             self._height_scanner = RayCaster(self.cfg.height_scanner)
             self.scene.sensors["height_scanner"] = self._height_scanner
@@ -71,23 +71,24 @@ class AnymalCEnv(DirectRLEnv):
         light_cfg.func("/World/Light", light_cfg)
 
     def _pre_physics_step(self, actions: torch.Tensor):
-        self._actions = actions.clone()
-        self._processed_actions = self.cfg.action_scale * self._actions + self._robot.data.default_joint_pos
+        #self._actions = actions.clone()
+        #self._processed_actions = self.cfg.action_scale * self._actions + self._robot.data.default_joint_pos
+        self._processed_actions = self.cfg.action_scale * self._actions + self._robot.data.joint_pos
+        #print("#############################")
+        #print(self.cfg.action_scale * self._actions)
+        #print(self._robot.data.default_joint_pos)
+        #print(self._robot.data.joint_pos)
+        #print("#############################")
+        #print()
 
     def _apply_action(self):
         #print(self._processed_actions)
         self._robot.set_joint_position_target(self._processed_actions)
-        print("#############################")
-        print(self.cfg.action_scale * self._actions)
-        print(self._robot.data.default_joint_pos)
-        print(self._robot.data.joint_pos)
-        print("#############################")
-        print()
 
     def _get_observations(self) -> dict:
         self._previous_actions = self._actions.clone()
         height_data = None
-        if isinstance(self.cfg, AnymalCRoughEnvCfg):
+        if isinstance(self.cfg, QuadEanRoughEnvCfg):
             height_data = (
                 self._height_scanner.data.pos_w[:, 2].unsqueeze(1) - self._height_scanner.data.ray_hits_w[..., 2] - 0.5
             ).clip(-1.0, 1.0)
@@ -99,7 +100,7 @@ class AnymalCEnv(DirectRLEnv):
                     self._robot.data.root_ang_vel_b,
                     self._robot.data.projected_gravity_b,
                     self._commands,
-                    self._robot.data.joint_pos - self._robot.data.default_joint_pos,
+                    self._robot.data.joint_pos,
                     self._robot.data.joint_vel,
                     height_data,
                     self._actions,
@@ -166,7 +167,7 @@ class AnymalCEnv(DirectRLEnv):
         net_contact_forces = self._contact_sensor.data.net_forces_w_history
         died = torch.any(torch.max(torch.norm(net_contact_forces[:, :, self._base_id], dim=-1), dim=1)[0] > 1.0, dim=1)
         return died, time_out
-
+    
     def _reset_idx(self, env_ids: torch.Tensor | None):
         if env_ids is None or len(env_ids) == self.num_envs:
             env_ids = self._robot._ALL_INDICES
