@@ -15,6 +15,8 @@ import isaaclab.sim as sim_utils
 from isaaclab.actuators import DelayedPDActuatorCfg, RemotizedPDActuatorCfg
 from isaaclab.assets.articulation import ArticulationCfg
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from isaaclab.actuators import ActuatorNetLSTMCfg, DCMotorCfg
+
 
 # Note: This data was collected by the Boston Dynamics AI Institute.
 joint_parameter_lookup = [
@@ -147,6 +149,7 @@ SPOT_CFG = ArticulationCfg(
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=True, solver_position_iteration_count=4, solver_velocity_iteration_count=0
         ),
+        scale=(0.3, 0.3, 0.3)
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.5),
@@ -159,6 +162,7 @@ SPOT_CFG = ArticulationCfg(
         },
         joint_vel={".*": 0.0},
     ),
+    
     actuators={
         "spot_hip": DelayedPDActuatorCfg(
             joint_names_expr=[".*_h[xy]"],

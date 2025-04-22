@@ -43,10 +43,10 @@ from isaaclab.assets import Articulation
 ##
 # Pre-defined configs
 ##
-from isaaclab_assets.robots.robot_spot_ean import QUAD_EAN
-from isaaclab_assets.robots.anymal import ANYMAL_C_CFG, ANYMAL_B_CFG
-from isaaclab_assets.robots.spot import SPOT_CFG
-from isaaclab_assets.robots.humanoid_28 import HUMANOID_28_CFG
+from isaaclab_assets.robots.anymal import ANYMAL_B_CFG, ANYMAL_C_CFG, ANYMAL_D_CFG  # isort:skip
+from isaaclab_assets.robots.spot import SPOT_CFG  # isort:skip
+from isaaclab_assets.robots.unitree import UNITREE_A1_CFG, UNITREE_GO1_CFG, UNITREE_GO2_CFG  # isort:skip
+
 
 def define_origins(num_origins: int, spacing: float) -> list[list[float]]:
     """Defines the origins of the scene."""
@@ -79,12 +79,47 @@ def design_scene() -> tuple[dict, list[list[float]]]:
     # Origin 1 with Anymal B
     prim_utils.create_prim("/World/Origin1", "Xform", translation=origins[0])
     # -- Robot
-    spot1 = Articulation(SPOT_CFG.replace(prim_path="/World/Origin1/Robot"))
-    spot2 = Articulation(QUAD_EAN.replace(prim_path="/World/Origin1/Robot2"))
+    anymal_b = Articulation(ANYMAL_B_CFG.replace(prim_path="/World/Origin1/Robot"))
+
+    # Origin 2 with Anymal C
+    prim_utils.create_prim("/World/Origin2", "Xform", translation=origins[1])
+    # -- Robot
+    anymal_c = Articulation(ANYMAL_C_CFG.replace(prim_path="/World/Origin2/Robot"))
+
+    # Origin 3 with Anymal D
+    prim_utils.create_prim("/World/Origin3", "Xform", translation=origins[2])
+    # -- Robot
+    anymal_d = Articulation(ANYMAL_D_CFG.replace(prim_path="/World/Origin3/Robot"))
+
+    # Origin 4 with Unitree A1
+    prim_utils.create_prim("/World/Origin4", "Xform", translation=origins[3])
+    # -- Robot
+    unitree_a1 = Articulation(UNITREE_A1_CFG.replace(prim_path="/World/Origin4/Robot"))
+
+    # Origin 5 with Unitree Go1
+    prim_utils.create_prim("/World/Origin5", "Xform", translation=origins[4])
+    # -- Robot
+    unitree_go1 = Articulation(UNITREE_GO1_CFG.replace(prim_path="/World/Origin5/Robot"))
+
+    # Origin 6 with Unitree Go2
+    prim_utils.create_prim("/World/Origin6", "Xform", translation=origins[5])
+    # -- Robot
+    unitree_go2 = Articulation(UNITREE_GO2_CFG.replace(prim_path="/World/Origin6/Robot"))
+
+    # Origin 7 with Boston Dynamics Spot
+    prim_utils.create_prim("/World/Origin7", "Xform", translation=origins[6])
+    # -- Robot
+    spot = Articulation(SPOT_CFG.replace(prim_path="/World/Origin7/Robot"))
+
     # return the scene information
     scene_entities = {
-        "spot1": spot1,
-        "spot2": spot2
+        "anymal_b": anymal_b,
+        "anymal_c": anymal_c,
+        "anymal_d": anymal_d,
+        "unitree_a1": unitree_a1,
+        "unitree_go1": unitree_go1,
+        "unitree_go2": unitree_go2,
+        "spot": spot,
     }
     return scene_entities, origins
 
@@ -94,39 +129,29 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
     # Define simulation stepping
     sim_dt = sim.get_physics_dt()
     sim_time = 0.0
-    count = 1
-    # Simulate physics
-    
+    count = 0
+
+    # reset counters
+    sim_time = 0.0
+    count = 0
+    # reset robots
     for index, robot in enumerate(entities.values()):
-        #joint_names = robot.joint_names  # Danh sách tên các joint (degrees of freedom - DOF)
-        #print("All joint names:", joint_names)
-        #print(robot.data.default_mass)
-        #print(robot.data.default_joint_pos)
-        
         # root state
         root_state = robot.data.default_root_state.clone()
-        root_state[:, :3] += origins[index]  
-        
-        root_state[:, 7:] = 0.0  
-        robot.write_root_pose_to_sim(root_state[:, :7])  
-        robot.write_root_velocity_to_sim(root_state[:, 7:])  
-
+        root_state[:, :3] += origins[index]
+        robot.write_root_pose_to_sim(root_state[:, :7])
+        robot.write_root_velocity_to_sim(root_state[:, 7:])
         # joint state
-        joint_pos = robot.data.default_joint_pos.clone()  
-        joint_vel = torch.zeros_like(robot.data.default_joint_vel) 
-        robot.write_joint_state_to_sim(joint_pos, joint_vel)  
-
+        joint_pos, joint_vel = robot.data.default_joint_pos.clone(), robot.data.default_joint_vel.clone()
+        robot.write_joint_state_to_sim(joint_pos, joint_vel)
         # reset the internal state
-        #print(robot.data.default_mass)
-        #print(robot.data.joint_pos_limits)
-        #print("################################################")
         robot.reset()
-        
-
+    print("[INFO]: Resetting robots state...")
+    # Simulate physics
     while simulation_app.is_running():
-        sim_time = 0.0
         # apply default actions to the quadrupedal robots
         for robot in entities.values():
+            # generate random joint positions
             joint_pos_target = robot.data.default_joint_pos #+ torch.randn_like(robot.data.joint_pos) * 0.1
             robot.set_joint_position_target(joint_pos_target)
             # write data to sim
@@ -139,14 +164,13 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
         # update buffers
         for robot in entities.values():
             robot.update(sim_dt)
-            #print(robot.data.joint_pos)
 
 
 def main():
     """Main function."""
 
     # Initialize the simulation context
-    sim = sim_utils.SimulationContext(sim_utils.SimulationCfg(dt=0.001, device="cpu"))
+    sim = sim_utils.SimulationContext(sim_utils.SimulationCfg(dt=0.01))
     # Set main camera
     sim.set_camera_view(eye=[2.5, 2.5, 2.5], target=[0.0, 0.0, 0.0])
     # design scene
